@@ -17,6 +17,6 @@ provide one of the following arguments
 
 Example:
 ```bash
-python3 -u http://www.google.com # to scan URL
+python3 -u <url> # to scan URL
 python3 -f /path/to/file to scan file.
 ```

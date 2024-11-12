@@ -130,7 +130,7 @@ def get_url_analysis_report(session, base_url, analysis_id):
         json_data = json.loads(resp.text)
         status = json_data['data']['attributes']['status']
         while status != "completed":
-            logging.info(f"File is still being analyzed waiting 5 minutes...")
+            logging.info(f"URL is still being analyzed waiting 5 minutes...")
             time.sleep(300)
             resp = session.get(report_url)
             json_data = json.loads(resp.text)

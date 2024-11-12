@@ -6,6 +6,7 @@ import json
 import os
 import requests
 import logging
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -39,14 +40,6 @@ def upload_file(session, base_url, file):
         logging.error("Couldn't get file size.")
         return None
 
-    if file_size <= 33554432:
-        url = base_url + "/files"
-    elif file_size >= 33554432 and file_size <= 681574400:
-        url = base_url + "/files/upload_url"
-    else:
-        logging.error(f"File is too large for Virustotal API {str(file_size)}")
-        return None
-
     try:
         file_contents = open(file, "rb")
     except FileNotFoundError:
@@ -54,6 +47,18 @@ def upload_file(session, base_url, file):
         return None
 
     files = {"file": (f"{file.name}", file_contents)}
+
+    if file_size <= 33554432:
+        url = base_url + "/files"
+    elif file_size >= 33554432 and file_size <= 681574400:
+        req_url = base_url + "/files/upload_url"
+        resp = session.get(req_url)
+        json_data = json.loads(resp.text)
+        url = json_data['data']
+    else:
+        logging.error(f"File is too large for Virustotal API {str(file_size)}")
+        return None
+
     resp = session.post(url, files=files)
     if resp.status_code == 200:
         logging.info("File uploaded successfully!")
@@ -75,19 +80,26 @@ def get_file_analysis_report(session, base_url, analysis_id):
     if resp.status_code == 200:
         json_data = json.loads(resp.text)
         status = json_data['data']['attributes']['status']
-        if status == "completed":
-            malicious_count = json_data['data']['attributes']['stats']['malicious']
-            suspicious_count = json_data['data']['attributes']['stats']['suspicious']
-            undetected_count = json_data['data']['attributes']['stats']['undetected']
-            harmless_count = json_data['data']['attributes']['stats']['harmless']
-            failure_count = json_data['data']['attributes']['stats']['failure']
-            if malicious_count > 0:
-                logging.warning(f"File is malicious! malicious_count: {malicious_count}")
-            elif suspicious_count > 0:
-                logging.warning(f"File is suspicious! suspicious_count: {suspicious_count}")
-            else:
-                logging.info("The File is likely clean...")
-                logging.info(f"Results: undetected_count: {undetected_count}, harmless_count: {harmless_count}, failure_count: {failure_count}")
+        while status != "completed":
+            logging.info(f"File is still being analyzed waiting 5 minutes...")
+            time.sleep(300)
+            resp = session.get(url)
+            json_data = json.loads(resp.text)
+            status = json_data['data']['attributes']['status']
+            if status == "completed":
+                break
+        malicious_count = json_data['data']['attributes']['stats']['malicious']
+        suspicious_count = json_data['data']['attributes']['stats']['suspicious']
+        undetected_count = json_data['data']['attributes']['stats']['undetected']
+        harmless_count = json_data['data']['attributes']['stats']['harmless']
+        failure_count = json_data['data']['attributes']['stats']['failure']
+        if malicious_count > 0:
+            logging.warning(f"File is malicious! malicious_count: {malicious_count}")
+        elif suspicious_count > 0:
+            logging.warning(f"File is suspicious! suspicious_count: {suspicious_count}")
+        else:
+            logging.info("The File is likely clean...")
+            logging.info(f"Results: undetected_count: {undetected_count}, harmless_count: {harmless_count}, failure_count: {failure_count}")
     else:
         logging.error(f"There was an error getting the analysis report: {resp.status_code} {resp.text}")
 
@@ -123,13 +135,13 @@ def get_url_analysis_report(session, base_url, analysis_id):
             undetected_count = json_data['data']['attributes']['stats']['undetected']
             harmless_count = json_data['data']['attributes']['stats']['harmless']
             timeout_count = json_data['data']['attributes']['stats']['timeout']
-            if malicious_count > 0:
+            if malicious_count > 5:
                 logging.warning(f"URL is malicious! malicious_count: {malicious_count}")
-            elif suspicious_count > 0:
+            elif suspicious_count > 5:
                 logging.warning(f"URL is suspicious! suspicious_count: {suspicious_count}")
             else:
                 logging.info("The URL is likely clean...")
-                logging.info(f"Results: undetected_count: {undetected_count}, harmless_count: {harmless_count}, timeout_count: {timeout_count}")
+                logging.info(f"Results: malicious_count: {malicious_count}, undetected_count: {undetected_count}, harmless_count: {harmless_count}, timeout_count: {timeout_count}")
     else:
         logging.error(f"There was an error getting the analysis report: {resp.status_code} {resp.text}")
 
@@ -154,16 +166,14 @@ def main():
     session = create_session(api_key)
     if args.url:
         analysis_id = scan_url(session, api_base_url, args.url)
-        if analysis_id:
-            get_url_analysis_report(session, api_base_url, analysis_id)
+        get_url_analysis_report(session, api_base_url, analysis_id)
     elif args.file:
         file = r"{}".format(args.file)
         if "\\" in file:
             converted_file = convert_from_windows_path(file)
             clean_file = Path(converted_file)
         analysis_id = upload_file(session, api_base_url, clean_file)
-        if analysis_id:
-            get_file_analysis_report(session, api_base_url, analysis_id)
+        get_file_analysis_report(session, api_base_url, analysis_id)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,9 @@ VT_API_KEY = "xxxx"
 ```
 Install python-dotenv by running:
 ```bash
-pipx install python-dotenv
+pipx install python-dotenv #using pipx to not break system dependencies (Linux)
+-or-
+pip install python-dotenv
 ```
 # Running
 provide one of the following arguments

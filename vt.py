@@ -93,13 +93,13 @@ def get_file_analysis_report(session, base_url, analysis_id):
         undetected_count = json_data['data']['attributes']['stats']['undetected']
         harmless_count = json_data['data']['attributes']['stats']['harmless']
         failure_count = json_data['data']['attributes']['stats']['failure']
-        if malicious_count > 0:
+        if malicious_count > 5:
             logging.warning(f"File is malicious! malicious_count: {malicious_count}")
-        elif suspicious_count > 0:
+        elif suspicious_count > 5:
             logging.warning(f"File is suspicious! suspicious_count: {suspicious_count}")
         else:
             logging.info("The File is likely clean...")
-            logging.info(f"Results: undetected_count: {undetected_count}, harmless_count: {harmless_count}, failure_count: {failure_count}")
+            logging.info(f"Results: malicious_count: {malicious_count}, undetected_count: {undetected_count}, harmless_count: {harmless_count}, failure_count: {failure_count}")
     else:
         logging.error(f"There was an error getting the analysis report: {resp.status_code} {resp.text}")
 
@@ -129,19 +129,26 @@ def get_url_analysis_report(session, base_url, analysis_id):
     if resp.status_code == 200:
         json_data = json.loads(resp.text)
         status = json_data['data']['attributes']['status']
-        if status == "completed":
-            malicious_count = json_data['data']['attributes']['stats']['malicious']
-            suspicious_count = json_data['data']['attributes']['stats']['suspicious']
-            undetected_count = json_data['data']['attributes']['stats']['undetected']
-            harmless_count = json_data['data']['attributes']['stats']['harmless']
-            timeout_count = json_data['data']['attributes']['stats']['timeout']
-            if malicious_count > 5:
-                logging.warning(f"URL is malicious! malicious_count: {malicious_count}")
-            elif suspicious_count > 5:
-                logging.warning(f"URL is suspicious! suspicious_count: {suspicious_count}")
-            else:
-                logging.info("The URL is likely clean...")
-                logging.info(f"Results: malicious_count: {malicious_count}, undetected_count: {undetected_count}, harmless_count: {harmless_count}, timeout_count: {timeout_count}")
+        while status != "completed":
+            logging.info(f"File is still being analyzed waiting 5 minutes...")
+            time.sleep(300)
+            resp = session.get(report_url)
+            json_data = json.loads(resp.text)
+            status = json_data['data']['attributes']['status']
+            if status == "completed":
+                break
+        malicious_count = json_data['data']['attributes']['stats']['malicious']
+        suspicious_count = json_data['data']['attributes']['stats']['suspicious']
+        undetected_count = json_data['data']['attributes']['stats']['undetected']
+        harmless_count = json_data['data']['attributes']['stats']['harmless']
+        timeout_count = json_data['data']['attributes']['stats']['timeout']
+        if malicious_count > 5:
+            logging.warning(f"URL is malicious! malicious_count: {malicious_count}")
+        elif suspicious_count > 5:
+            logging.warning(f"URL is suspicious! suspicious_count: {suspicious_count}")
+        else:
+            logging.info("The URL is likely clean...")
+            logging.info(f"Results: malicious_count: {malicious_count}, undetected_count: {undetected_count}, harmless_count: {harmless_count}, timeout_count: {timeout_count}")
     else:
         logging.error(f"There was an error getting the analysis report: {resp.status_code} {resp.text}")
 
@@ -166,14 +173,16 @@ def main():
     session = create_session(api_key)
     if args.url:
         analysis_id = scan_url(session, api_base_url, args.url)
-        get_url_analysis_report(session, api_base_url, analysis_id)
+        if analysis_id:
+            get_url_analysis_report(session, api_base_url, analysis_id)
     elif args.file:
         file = r"{}".format(args.file)
         if "\\" in file:
             converted_file = convert_from_windows_path(file)
             clean_file = Path(converted_file)
         analysis_id = upload_file(session, api_base_url, clean_file)
-        get_file_analysis_report(session, api_base_url, analysis_id)
+        if analysis_id:
+            get_file_analysis_report(session, api_base_url, analysis_id)
 
 
 if __name__ == "__main__":
